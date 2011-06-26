@@ -76,13 +76,8 @@ def _raise_serialization_error(text):
         "cannot serialize %r (type %s)" % (text, type(text).__name__)
         )
 
-def _encode(text, encoding):
-    try:
-        return text.encode(encoding, "xmlcharrefreplace")
-    except (TypeError, AttributeError):
-        _raise_serialization_error(text)
 
-def _escape_cdata(text, encoding):
+def _escape_cdata(text):
     # escape character data
     try:
         # it's worth avoiding do-nothing calls for strings that are
@@ -94,12 +89,12 @@ def _escape_cdata(text, encoding):
             text = text.replace("<", "&lt;")
         if ">" in text:
             text = text.replace(">", "&gt;")
-        return text.encode(encoding, "xmlcharrefreplace")
+        return text
     except (TypeError, AttributeError):
         _raise_serialization_error(text)
 
 
-def _escape_attrib(text, encoding):
+def _escape_attrib(text):
     # escape attribute value
     try:
         if "&" in text:
@@ -112,11 +107,11 @@ def _escape_attrib(text, encoding):
             text = text.replace("\"", "&quot;")
         if "\n" in text:
             text = text.replace("\n", "&#10;")
-        return text.encode(encoding, "xmlcharrefreplace")
+        return text
     except (TypeError, AttributeError):
         _raise_serialization_error(text)
 
-def _escape_attrib_html(text, encoding):
+def _escape_attrib_html(text):
     # escape attribute value
     try:
         if "&" in text:
@@ -127,25 +122,25 @@ def _escape_attrib_html(text, encoding):
             text = text.replace(">", "&gt;")
         if "\"" in text:
             text = text.replace("\"", "&quot;")
-        return text.encode(encoding, "xmlcharrefreplace")
+        return text
     except (TypeError, AttributeError):
         _raise_serialization_error(text)
 
 
-def _serialize_html(write, elem, encoding, qnames, namespaces, format):
+def _serialize_html(write, elem, qnames, namespaces, format):
     tag = elem.tag
     text = elem.text
     if tag is Comment:
-        write("<!--%s-->" % _escape_cdata(text, encoding))
+        write("<!--%s-->" % _escape_cdata(text))
     elif tag is ProcessingInstruction:
-        write("<?%s?>" % _escape_cdata(text, encoding))
+        write("<?%s?>" % _escape_cdata(text))
     else:
         tag = qnames[tag]
         if tag is None:
             if text:
-                write(_escape_cdata(text, encoding))
+                write(_escape_cdata(text))
             for e in elem:
-                _serialize_html(write, e, encoding, qnames, None, format)
+                _serialize_html(write, e, qnames, None, format)
         else:
             write("<" + tag)
             items = elem.items()
@@ -157,7 +152,7 @@ def _serialize_html(write, elem, encoding, qnames, namespaces, format):
                     if isinstance(v, QName):
                         v = qnames[v.text]
                     else:
-                        v = _escape_attrib_html(v, encoding)
+                        v = _escape_attrib_html(v)
                     if qnames[k] == v and format == 'html':
                         # handle boolean attributes
                         write(" %s" % v)
@@ -170,8 +165,8 @@ def _serialize_html(write, elem, encoding, qnames, namespaces, format):
                         if k:
                             k = ":" + k
                         write(" xmlns%s=\"%s\"" % (
-                            k.encode(encoding),
-                            _escape_attrib(v, encoding)
+                            k,
+                            _escape_attrib(v)
                             ))
             if format == "xhtml" and tag in HTML_EMPTY:
                 write(" />")
@@ -180,15 +175,15 @@ def _serialize_html(write, elem, encoding, qnames, namespaces, format):
                 tag = tag.lower()
                 if text:
                     if tag == "script" or tag == "style":
-                        write(_encode(text, encoding))
+                        write(text)
                     else:
-                        write(_escape_cdata(text, encoding))
+                        write(_escape_cdata(text))
                 for e in elem:
-                    _serialize_html(write, e, encoding, qnames, None, format)
+                    _serialize_html(write, e, qnames, None, format)
                 if tag not in HTML_EMPTY:
                     write("</" + tag + ">")
     if elem.tail:
-        write(_escape_cdata(elem.tail, encoding))
+        write(_escape_cdata(elem.tail))
 
 def _write_html(root,
           # keyword arguments
@@ -204,9 +199,12 @@ def _write_html(root,
             root, encoding, default_namespace
             )
     _serialize_html(
-                write, root, encoding, qnames, namespaces, format
+                write, root, qnames, namespaces, format
                 )
-    return "".join(data)
+    if encoding:
+        return "".join(data).encode(encoding, 'xmlcharrefreplace')
+    else:
+        return "".join(data)
 
 # --------------------------------------------------------------------
 # serialization support
@@ -214,7 +212,7 @@ def _write_html(root,
 def _namespaces(elem, encoding, default_namespace=None):
     # identify namespaces used in this tree
 
-    # maps qnames to *encoded* prefix:local names
+    # maps qnames to prefix:local names
     qnames = {None: None}
 
     # maps uri:s to prefixes
@@ -238,9 +236,9 @@ def _namespaces(elem, encoding, default_namespace=None):
                     if prefix != "xml":
                         namespaces[uri] = prefix
                 if prefix:
-                    qnames[qname] = encode("%s:%s" % (prefix, tag))
+                    qnames[qname] = "%s:%s" % (prefix, tag)
                 else:
-                    qnames[qname] = encode(tag) # default element
+                    qnames[qname] = tag # default element
             else:
                 if default_namespace:
                     # FIXME: can this be handled in XML 1.0?
@@ -248,7 +246,7 @@ def _namespaces(elem, encoding, default_namespace=None):
                         "cannot use non-qualified names with "
                         "default_namespace option"
                         )
-                qnames[qname] = encode(qname)
+                qnames[qname] = qname
         except TypeError:
             _raise_serialization_error(qname)
 
