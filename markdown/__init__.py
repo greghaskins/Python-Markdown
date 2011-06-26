@@ -36,6 +36,7 @@ version_info = (2,1,0, "Dev")
 import re
 import codecs
 import logging
+import sys
 import util
 from preprocessors import build_preprocessors
 from blockprocessors import build_block_parser
@@ -201,7 +202,8 @@ class Markdown:
         # function called makeExtension()
         try:
             return module.makeExtension(configs.items())
-        except AttributeError, e:
+        except AttributeError:
+            e = sys.exc_info()[1]
             logger.warn("Failed to initiate extension '%s': %s" % (ext_name, e))
             return None
     
@@ -260,7 +262,8 @@ class Markdown:
         
         try:
             source = unicode(source)
-        except UnicodeDecodeError, e:
+        except UnicodeDecodeError:
+            e = sys.exc_info()[1]
             # Customise error message while maintaining original trackback
             e.reason += '. -- Note: Markdown only accepts unicode input!'
             raise
